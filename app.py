@@ -107,10 +107,10 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📋 How to Use")
     st.markdown("""
-1. Enter your **Groq API Key**
-2. Upload a **CSV file**
-3. Ask a **natural language question**
-4. Get **SQL + Answer + Chart**!
+
+1. Upload a **CSV file**
+2. Ask a **natural language question**
+3. Get **SQL + Answer + Chart**!
     """)
     st.markdown("---")
     
