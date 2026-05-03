@@ -99,7 +99,7 @@ st.markdown("""
 # ─── Sidebar: API Key + Model ────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚙️ Configuration")
-    groq_api_key = st.text_input("🔑 Groq API Key", type="password", placeholder="gsk_...")
+    groq_api_key = st.secrets["GROQ_API_KEY"]
     model_choice = st.selectbox(
         "🤖 LLM Model",
         ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"],
@@ -113,7 +113,7 @@ with st.sidebar:
 4. Get **SQL + Answer + Chart**!
     """)
     st.markdown("---")
-    st.markdown("Get your free API key at [console.groq.com](https://console.groq.com)")
+    
 
 # ─── Helper: Load CSV into SQLite ───────────────────────────────────────────
 @st.cache_resource
