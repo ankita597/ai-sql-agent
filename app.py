@@ -116,7 +116,7 @@ with st.sidebar:
     
 
 # ─── Helper: Load CSV into SQLite ───────────────────────────────────────────
-@st.cache_data
+@st.cache_resource
 def load_csv_to_sqlite(df: pd.DataFrame, table_name: str = "data"):
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     df.to_sql(table_name, conn, if_exists="replace", index=False)
