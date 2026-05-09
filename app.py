@@ -116,7 +116,7 @@ with st.sidebar:
     
 
 # ─── Helper: Load CSV into SQLite ───────────────────────────────────────────
-@st.cache_resource
+@st.cache_data
 def load_csv_to_sqlite(df: pd.DataFrame, table_name: str = "data"):
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     df.to_sql(table_name, conn, if_exists="replace", index=False)
@@ -152,6 +152,7 @@ Sample rows (first 3):
 Rules:
 - Always use the table name "data"
 - Only use columns that exist in the schema
+- Always add LIMIT 100 at the end of the query unless the user explicitly asks for all rows
 - Return your response as valid JSON only (no markdown), with keys: "sql", "explanation", "chart_type"
 - chart_type must be one of: bar, line, pie, scatter, none
 """
@@ -189,10 +190,16 @@ def render_chart(df_result, chart_type):
             fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
         else:
             # Fallback bar
-            if len(num_cols) >= 1:
-                fig = px.bar(df_result, y=num_cols[0], color_discrete_sequence=["#a78bfa"])
-            else:
-                return
+           if len(num_cols) >= 2:
+               fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
+           elif len(num_cols) == 1 and len(cat_cols) >= 1:
+                fig = px.bar(df_result, x=cat_cols[0], y=num_cols[0], color_discrete_sequence=["#a78bfa"])
+           elif len(num_cols) == 1:
+               st.info(f"📊 Result: **{df_result[num_cols[0]].iloc[0]}**")
+               return
+           else:
+               st.info("No suitable columns for visualization.")
+               return
 
         fig.update_layout(
             plot_bgcolor="rgba(0,0,0,0)",
