@@ -138,23 +138,23 @@ def run_sql(conn, query):
 
 # ─── Helper: Ask Groq ────────────────────────────────────────────────────────
 def ask_groq(client, model, schema, question, sample_rows):
-    system_prompt = f"""You are an expert SQL analyst. Given a SQLite database schema and sample data, you:
-1. Generate a correct SQLite SQL query to answer the user's question.
-2. Provide a short plain-English explanation of the result.
-3. Suggest the best chart type (bar, line, pie, scatter, or none).
+    system_prompt = f"""You are an expert SQLite SQL analyst. Your job is to write ONLY valid SQLite SQL queries.
 
-Schema:
+IMPORTANT: The database table is named "data" and has ONLY these exact columns:
 {schema}
 
-Sample rows (first 3):
+Sample data (first 3 rows):
 {sample_rows}
 
-Rules:
-- Always use the table name "data"
-- Only use columns that exist in the schema
-- Always add LIMIT 100 at the end of the query unless the user explicitly asks for all rows
-- Return your response as valid JSON only (no markdown), with keys: "sql", "explanation", "chart_type"
+STRICT RULES - YOU MUST FOLLOW:
+- ONLY use column names that are listed in the schema above. Do NOT invent or guess column names.
+- NEVER use column names not present in the schema. If a question refers to a concept not in the schema, find the closest matching column or return a query on available columns.
+- Always use table name "data"
+- Always wrap column names that may conflict with SQL keywords in double quotes e.g. "name", "order", "group"
+- Always add LIMIT 100 unless user asks for all rows
+- Return ONLY valid JSON with keys: "sql", "explanation", "chart_type"
 - chart_type must be one of: bar, line, pie, scatter, none
+- Do NOT include markdown, backticks, or any text outside the JSON
 """
     response = client.chat.completions.create(
         model=model,
