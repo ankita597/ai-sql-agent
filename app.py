@@ -127,7 +127,7 @@ Sample rows (first 3):
 {sample}
 
 RULES:
-1. Use ONLY column names listed above — copy them exactly.
+1. Use ONLY column names listed above - copy them exactly.
 2. Always reference the table as "data".
 3. Wrap SQL-keyword column names in double quotes e.g. "order", "group".
 4. Default LIMIT is 100 unless user asks for fewer.
