@@ -281,7 +281,7 @@ if uploaded_file:
                         st.markdown("### 💡 Explanation")
                         st.markdown(f'<div class="answer-box">{explanation}</div>', unsafe_allow_html=True)
 
-                    with col_right:
+                   with col_right:
                         st.markdown("### 📋 Query Results")
                         df_result, error = run_sql(conn, sql_query)
                         if error:
@@ -289,9 +289,19 @@ if uploaded_file:
                         else:
                             st.dataframe(df_result, use_container_width=True)
 
-                    if df_result is not None and not df_result.empty and chart_type != "none":
-                        st.markdown("### 📊 Visualization")
-                        render_chart(df_result, chart_type)
+                    if df_result is not None and not df_result.empty:
+                        # Auto-detect chart type if AI returns "none"
+                        num_cols = df_result.select_dtypes(include="number").columns.tolist()
+                        cat_cols = df_result.select_dtypes(exclude="number").columns.tolist()
+                        if chart_type == "none":
+                            if len(cat_cols) >= 1 and len(num_cols) >= 1:
+                                chart_type = "bar"
+                            elif len(num_cols) >= 2:
+                                chart_type = "scatter"
+
+                        if chart_type != "none":
+                            st.markdown("### 📊 Visualization")
+                            render_chart(df_result, chart_type)
 
                 except json.JSONDecodeError:
                     st.error("⚠️ AI returned an unexpected format. Try rephrasing your question.")
