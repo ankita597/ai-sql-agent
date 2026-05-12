@@ -226,7 +226,7 @@ if uploaded_file:
     with st.expander("🔍 Preview Data (first 10 rows)"):
         st.dataframe(df.head(10), use_container_width=True)
     
-    conn = load_csv_to_sqlite(df)
+    conn = load_csv_to_sqlite(csv_bytes)
     schema = get_schema(conn)
     sample_rows = df.head(3).to_string(index=False)
 
