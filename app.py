@@ -291,10 +291,15 @@ if uploaded_file:
                             st.error(f"SQL Error: {error}")
                         else:
                             st.dataframe(df_result, use_container_width=True)
-
-                    if df_result is not None and not df_result.empty and chart_type != "none":
-                        st.markdown("### 📊 Visualization")
-                        render_chart(df_result, chart_type)
+                            
+                           st.markdown("### 📊 Visualization")
+                        if df_result is not None and not df_result.empty:
+                            if chart_type == "none":
+                                st.info("📊 No visualization available for this query.")
+                            else:
+                                render_chart(df_result, chart_type)
+                            else:
+                               st.info("📊 No data to visualize.")
 
                 except json.JSONDecodeError:
                     st.error("⚠️ AI returned an unexpected format. Try rephrasing your question.")
