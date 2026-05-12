@@ -1,10 +1,8 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-import os
 import re
 import json
-import matplotlib.pyplot as plt
 import plotly.express as px
 from groq import Groq
 
@@ -20,70 +18,35 @@ st.set_page_config(
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Space Grotesk', sans-serif;
-    }
-    
+    html, body, [class*="css"] { font-family: 'Space Grotesk', sans-serif; }
     .main-header {
         background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-        padding: 2rem;
-        border-radius: 15px;
-        margin-bottom: 2rem;
-        color: white;
-        text-align: center;
+        padding: 2rem; border-radius: 15px; margin-bottom: 2rem;
+        color: white; text-align: center;
     }
-    
     .main-header h1 {
-        font-size: 2.5rem;
-        font-weight: 700;
+        font-size: 2.5rem; font-weight: 700;
         background: linear-gradient(90deg, #a78bfa, #38bdf8);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
-    
     .sql-box {
-        background: #1e1e2e;
-        color: #cdd6f4;
-        padding: 1rem;
-        border-radius: 10px;
-        font-family: 'Courier New', monospace;
-        border-left: 4px solid #a78bfa;
-        font-size: 0.9rem;
-        white-space: pre-wrap;
+        background: #1e1e2e; color: #cdd6f4; padding: 1rem;
+        border-radius: 10px; font-family: 'Courier New', monospace;
+        border-left: 4px solid #a78bfa; font-size: 0.9rem; white-space: pre-wrap;
     }
-    
     .answer-box {
-        background: linear-gradient(135deg, #1a1a2e, #16213e);
-        color: #e2e8f0;
-        padding: 1.5rem;
-        border-radius: 12px;
-        border-left: 4px solid #38bdf8;
-        margin-top: 1rem;
+        background: linear-gradient(135deg, #1a1a2e, #16213e); color: #e2e8f0;
+        padding: 1.5rem; border-radius: 12px; border-left: 4px solid #38bdf8; margin-top: 1rem;
     }
-    
     .stButton>button {
         background: linear-gradient(135deg, #a78bfa, #38bdf8);
-        color: white;
-        font-weight: 600;
-        border-radius: 8px;
-        border: none;
-        padding: 0.5rem 2rem;
-        width: 100%;
-        font-size: 1rem;
+        color: white; font-weight: 600; border-radius: 8px; border: none;
+        padding: 0.5rem 2rem; width: 100%; font-size: 1rem;
     }
-    
-    .stButton>button:hover {
-        opacity: 0.9;
-        transform: translateY(-1px);
-    }
-    
+    .stButton>button:hover { opacity: 0.9; transform: translateY(-1px); }
     .metric-card {
         background: linear-gradient(135deg, #1a1a2e, #16213e);
-        border-radius: 10px;
-        padding: 1rem;
-        border: 1px solid #334155;
-        text-align: center;
+        border-radius: 10px; padding: 1rem; border: 1px solid #334155; text-align: center;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -96,7 +59,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ─── Sidebar: API Key + Model ────────────────────────────────────────────────
+# ─── Sidebar ────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚙️ Configuration")
     groq_api_key = st.secrets["GROQ_API_KEY"]
@@ -107,7 +70,6 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📋 How to Use")
     st.markdown("""
-
 1. Upload a **CSV file**
 2. Ask a **natural language question**
 3. Get **SQL + Answer + Chart**!
@@ -136,6 +98,7 @@ def run_sql(conn, query):
     except Exception as e:
         return None, str(e)
 
+
 # ─── Helper: Ask Groq ────────────────────────────────────────────────────────
 def ask_groq(client, model, schema, question, sample_rows):
     system_prompt = f"""You are an expert SQLite SQL analyst. Your job is to write ONLY valid SQLite SQL queries.
@@ -146,15 +109,21 @@ IMPORTANT: The database table is named "data" and has ONLY these exact columns:
 Sample data (first 3 rows):
 {sample_rows}
 
-STRICT RULES - YOU MUST FOLLOW:
-- ONLY use column names that are listed in the schema above. Do NOT invent or guess column names.
-- NEVER use column names not present in the schema. If a question refers to a concept not in the schema, find the closest matching column or return a query on available columns.
-- Always use table name "data"
-- Always wrap column names that may conflict with SQL keywords in double quotes e.g. "name", "order", "group"
-- Always add LIMIT 100 unless user asks for all rows
-- Return ONLY valid JSON with keys: "sql", "explanation", "chart_type"
-- chart_type must be one of: bar, line, pie, scatter, none
-- Do NOT include markdown, backticks, or any text outside the JSON
+STRICT RULES - YOU MUST FOLLOW ALL OF THESE:
+1. ONLY use column names listed in the schema above. NEVER invent or guess column names.
+2. Always use table name "data".
+3. Always wrap column names that may conflict with SQL keywords in double quotes e.g. "name", "order", "group", "index".
+4. NEVER use LIMIT 1 unless the user explicitly asks for only 1 result. Always use LIMIT 100 by default.
+5. For questions like "which X is most/highest/top", return ALL groups with counts ordered by value, not just 1 row.
+6. Always include a COUNT or numeric column when grouping, so charts can be rendered.
+7. Return ONLY valid JSON with keys: "sql", "explanation", "chart_type".
+8. chart_type must be one of: bar, line, pie, scatter, none.
+   - Use "bar" for comparisons and counts by category.
+   - Use "pie" for percentage or share questions.
+   - Use "line" for time-based trends.
+   - Use "scatter" for correlations between two numbers.
+   - Use "none" only for raw row lookups (SELECT * queries).
+9. Do NOT include markdown, backticks, or any text outside the JSON.
 """
     response = client.chat.completions.create(
         model=model,
@@ -165,38 +134,48 @@ STRICT RULES - YOU MUST FOLLOW:
         temperature=0.1,
     )
     raw = response.choices[0].message.content.strip()
-    # Strip markdown code fences if present
     raw = re.sub(r"```json|```", "", raw).strip()
     return json.loads(raw)
 
+
 # ─── Helper: Auto Chart ─────────────────────────────────────────────────────
 def render_chart(df_result, chart_type):
-    if df_result is None or df_result.empty or chart_type == "none":
+    if df_result is None or df_result.empty:
         return
 
-    cols = df_result.columns.tolist()
     num_cols = df_result.select_dtypes(include="number").columns.tolist()
     cat_cols = df_result.select_dtypes(exclude="number").columns.tolist()
 
+    # Auto-detect chart type if AI returns "none" but data is chartable
+    if chart_type == "none":
+        if len(cat_cols) >= 1 and len(num_cols) >= 1:
+            chart_type = "bar"
+        elif len(num_cols) >= 2:
+            chart_type = "scatter"
+
+    if chart_type == "none":
+        return
+
     try:
         if chart_type == "bar" and len(cat_cols) >= 1 and len(num_cols) >= 1:
-            fig = px.bar(df_result, x=cat_cols[0], y=num_cols[0], color_discrete_sequence=["#a78bfa"])
+            fig = px.bar(df_result, x=cat_cols[0], y=num_cols[0],
+                         color=cat_cols[0], color_discrete_sequence=px.colors.qualitative.Pastel)
         elif chart_type == "line" and len(num_cols) >= 1:
             x_col = cat_cols[0] if cat_cols else num_cols[0]
-            fig = px.line(df_result, x=x_col, y=num_cols[0], markers=True, color_discrete_sequence=["#38bdf8"])
+            fig = px.line(df_result, x=x_col, y=num_cols[0], markers=True,
+                          color_discrete_sequence=["#38bdf8"])
         elif chart_type == "pie" and len(cat_cols) >= 1 and len(num_cols) >= 1:
             fig = px.pie(df_result, names=cat_cols[0], values=num_cols[0])
         elif chart_type == "scatter" and len(num_cols) >= 2:
-            fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
+            fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1],
+                             color_discrete_sequence=["#f472b6"])
         else:
-            # Fallback
-            if len(num_cols) >= 2:
-                fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
-            elif len(num_cols) == 1 and len(cat_cols) >= 1:
-                fig = px.bar(df_result, x=cat_cols[0], y=num_cols[0], color_discrete_sequence=["#a78bfa"])
-            elif len(num_cols) == 1:
-                st.info(f"📊 Result: **{df_result[num_cols[0]].iloc[0]}**")
+            if len(num_cols) == 1 and len(cat_cols) == 0:
+                st.info(f"📊 Result: **{df_result[num_cols[0]].iloc[0]:,}**")
                 return
+            elif len(num_cols) >= 1 and len(cat_cols) >= 1:
+                fig = px.bar(df_result, x=cat_cols[0], y=num_cols[0],
+                             color_discrete_sequence=["#a78bfa"])
             else:
                 st.info("No suitable columns for visualization.")
                 return
@@ -211,12 +190,15 @@ def render_chart(df_result, chart_type):
     except Exception as e:
         st.warning(f"Chart could not be rendered: {e}")
 
+
 # ─── Main App ────────────────────────────────────────────────────────────────
 uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    load_csv_to_sqlite.clear()  # clear cache on new upload
+
+    # Clear cache on every new upload so old data never persists
+    load_csv_to_sqlite.clear()
 
     st.success(f"✅ Loaded **{len(df):,} rows × {len(df.columns)} columns**")
 
@@ -238,13 +220,13 @@ if uploaded_file:
     st.markdown("---")
     st.markdown("### 💬 Ask a Question")
 
-    # Suggested questions
     st.markdown("**Quick examples:**")
     example_cols = df.columns.tolist()
+    num_example_col = df.select_dtypes(include='number').columns[0] if df.select_dtypes(include='number').shape[1] > 0 else example_cols[0]
     examples = [
-        f"Show me the top 5 rows",
-        f"Count total number of records",
-        f"What is the average of {example_cols[1] if len(example_cols) > 1 else example_cols[0]}?" if df.select_dtypes(include='number').shape[1] > 0 else "Show distinct values",
+        "Show me the top 5 rows",
+        "Count total number of records",
+        f"What is the average {num_example_col}?",
     ]
     col_a, col_b, col_c = st.columns(3)
     q_select = ""
@@ -255,7 +237,7 @@ if uploaded_file:
     user_question = st.text_input(
         "Ask anything about your data...",
         value=q_select,
-        placeholder="e.g. What are the top 5 products by total sales?"
+        placeholder="e.g. Which category has the highest total sales?"
     )
 
     if st.button("🚀 Analyze"):
@@ -278,7 +260,6 @@ if uploaded_file:
                     with col_left:
                         st.markdown("### 🔎 Generated SQL")
                         st.markdown(f'<div class="sql-box">{sql_query}</div>', unsafe_allow_html=True)
-
                         st.markdown("### 💡 Explanation")
                         st.markdown(f'<div class="answer-box">{explanation}</div>', unsafe_allow_html=True)
 
@@ -290,19 +271,10 @@ if uploaded_file:
                         else:
                             st.dataframe(df_result, use_container_width=True)
 
-                    # ── Auto Visualization ──────────────────────────────
+                    # Auto Visualization
                     if df_result is not None and not df_result.empty:
-                        num_cols = df_result.select_dtypes(include="number").columns.tolist()
-                        cat_cols = df_result.select_dtypes(exclude="number").columns.tolist()
-                        # Auto-detect chart type if AI returns "none"
-                        if chart_type == "none":
-                            if len(cat_cols) >= 1 and len(num_cols) >= 1:
-                                chart_type = "bar"
-                            elif len(num_cols) >= 2:
-                                chart_type = "scatter"
-                        if chart_type != "none":
-                            st.markdown("### 📊 Visualization")
-                            render_chart(df_result, chart_type)
+                        st.markdown("### 📊 Visualization")
+                        render_chart(df_result, chart_type)
 
                 except json.JSONDecodeError:
                     st.error("⚠️ AI returned an unexpected format. Try rephrasing your question.")
