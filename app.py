@@ -62,9 +62,7 @@ st.markdown("""
 st.markdown("""
 <div class="main-header">
     <h1>🧠 AI SQL <span>Data Analyst</span></h1>
-    <p>csv → sqlite → groq llm agent → sql → insights</p>
-</div>
-""", unsafe_allow_html=True)
+    
 
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -84,13 +82,7 @@ with st.sidebar:
 3. The **Groq LLM Agent** auto-generates + runs SQL
 4. Get **Answer + SQL + Chart**
     """)
-    st.markdown("---")
-    st.markdown("""
-    <div style='font-family:IBM Plex Mono,monospace;font-size:0.7rem;color:#4a4a6a;'>
-    STACK: Groq · SQLite · SQLAlchemy<br>Pandas · Plotly · Streamlit
-    </div>
-    """, unsafe_allow_html=True)
-
+ 
 
 # ─── DB Helpers ───────────────────────────────────────────────────────────────
 @st.cache_resource
