@@ -216,6 +216,7 @@ uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
+    load_csv_to_sqlite.clear()  # clear cache on new upload
 
     st.success(f"✅ Loaded **{len(df):,} rows × {len(df.columns)} columns**")
 
