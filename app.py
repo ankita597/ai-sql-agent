@@ -117,13 +117,16 @@ with st.sidebar:
 
 # ─── Helper: Load CSV into SQLite ───────────────────────────────────────────
 @st.cache_resource
-def write_csv_to_sqlite(df, path):
-    engine = create_engine(...)
-    df.to_sql(...)
-    engine.dispose()       
+def load_csv_to_sqlite(csv_bytes: bytes, table_name: str = "data"):
+    import io
+    df = pd.read_csv(io.BytesIO(csv_bytes))
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    df.to_sql(table_name, conn, if_exists="replace", index=False)
+    return conn
 
-def get_engine(path):
-    return create_engine(...)  
+def get_schema(conn, table_name="data"):
+    cursor = conn.cursor()
+    cursor.execute(f"PRAGMA table_info({table_name})")
     cols = cursor.fetchall()
     schema_lines = [f"  {c[1]} ({c[2]})" for c in cols]
     return f"Table: {table_name}\nColumns:\n" + "\n".join(schema_lines)
@@ -214,14 +217,15 @@ def render_chart(df_result, chart_type):
 uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
 
 if uploaded_file:
-    df = pd.read_csv(uploaded_file)
+    csv_bytes = uploaded_file.read()
+    df = pd.read_csv(__import__("io").BytesIO(csv_bytes))
     
     st.success(f"✅ Loaded **{len(df):,} rows × {len(df.columns)} columns**")
     
     col1, col2, col3 = st.columns(3)
     col1.metric("📊 Rows", f"{len(df):,}")
     col2.metric("🔢 Columns", len(df.columns))
-    col3.metric("💾 Size", f"{uploaded_file.size / 1024:.1f} KB")
+    col3.metric("💾 Size", f"{len(csv_bytes) / 1024:.1f} KB")
     
     with st.expander("🔍 Preview Data (first 10 rows)"):
         st.dataframe(df.head(10), use_container_width=True)
