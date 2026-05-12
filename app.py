@@ -3,10 +3,11 @@ import pandas as pd
 import sqlite3
 import plotly.express as px
 
-from langchain_community.utilities import SQLDatabase
-from langchain_community.agent_toolkits import create_sql_agent
+from langchain_community.utilities.sql_database import SQLDatabase
+from langchain_community.agent_toolkits.sql.base import create_sql_agent
+from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from langchain_groq import ChatGroq
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text as sa_text
 import tempfile
 import os
 
@@ -180,7 +181,7 @@ def load_csv_to_sqlite(_df: pd.DataFrame, tmp_path: str, table_name: str = "data
 def get_schema_display(engine, table_name="data"):
     with engine.connect() as conn:
         result = conn.execute(
-            __import__("sqlalchemy").text(f"PRAGMA table_info({table_name})")
+            sa_text(f"PRAGMA table_info({table_name})")
         )
         cols = result.fetchall()
     lines = [f"  {c[1]} ({c[2]})" for c in cols]
@@ -189,7 +190,7 @@ def get_schema_display(engine, table_name="data"):
 def get_column_names(engine, table_name="data"):
     with engine.connect() as conn:
         result = conn.execute(
-            __import__("sqlalchemy").text(f"PRAGMA table_info({table_name})")
+            sa_text(f"PRAGMA table_info({table_name})")
         )
         return [row[1].lower() for row in result.fetchall()]
 
@@ -382,11 +383,12 @@ if uploaded_file:
                         temperature=0,
                     )
 
-                    # ── 3. Create LangChain SQL Agent ─────────────────────────
+                    # ── 3. Create LangChain SQL Agent via Toolkit ─────────────
+                    toolkit = SQLDatabaseToolkit(db=db, llm=llm)
                     agent_executor = create_sql_agent(
                         llm=llm,
-                        db=db,
-                        agent_type="openai-tools",   # works well with Groq
+                        toolkit=toolkit,
+                        agent_type="openai-tools",
                         verbose=False,
                         handle_parsing_errors=True,
                     )
