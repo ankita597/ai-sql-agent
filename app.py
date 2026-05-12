@@ -113,10 +113,10 @@ with st.sidebar:
 3. Get **SQL + Answer + Chart**!
     """)
     st.markdown("---")
-    
+
 
 # ─── Helper: Load CSV into SQLite ───────────────────────────────────────────
-@st.cache_resource
+@st.cache_data
 def load_csv_to_sqlite(df: pd.DataFrame, table_name: str = "data"):
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     df.to_sql(table_name, conn, if_exists="replace", index=False)
@@ -173,7 +173,7 @@ Rules:
 def render_chart(df_result, chart_type):
     if df_result is None or df_result.empty or chart_type == "none":
         return
-    
+
     cols = df_result.columns.tolist()
     num_cols = df_result.select_dtypes(include="number").columns.tolist()
     cat_cols = df_result.select_dtypes(exclude="number").columns.tolist()
@@ -189,17 +189,17 @@ def render_chart(df_result, chart_type):
         elif chart_type == "scatter" and len(num_cols) >= 2:
             fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
         else:
-            # Fallback bar
-           if len(num_cols) >= 2:
-               fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
-           elif len(num_cols) == 1 and len(cat_cols) >= 1:
+            # Fallback
+            if len(num_cols) >= 2:
+                fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
+            elif len(num_cols) == 1 and len(cat_cols) >= 1:
                 fig = px.bar(df_result, x=cat_cols[0], y=num_cols[0], color_discrete_sequence=["#a78bfa"])
-           elif len(num_cols) == 1:
-               st.info(f"📊 Result: **{df_result[num_cols[0]].iloc[0]}**")
-               return
-           else:
-               st.info("No suitable columns for visualization.")
-               return
+            elif len(num_cols) == 1:
+                st.info(f"📊 Result: **{df_result[num_cols[0]].iloc[0]}**")
+                return
+            else:
+                st.info("No suitable columns for visualization.")
+                return
 
         fig.update_layout(
             plot_bgcolor="rgba(0,0,0,0)",
@@ -216,17 +216,17 @@ uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    
+
     st.success(f"✅ Loaded **{len(df):,} rows × {len(df.columns)} columns**")
-    
+
     col1, col2, col3 = st.columns(3)
     col1.metric("📊 Rows", f"{len(df):,}")
     col2.metric("🔢 Columns", len(df.columns))
     col3.metric("💾 Size", f"{uploaded_file.size / 1024:.1f} KB")
-    
+
     with st.expander("🔍 Preview Data (first 10 rows)"):
         st.dataframe(df.head(10), use_container_width=True)
-    
+
     conn = load_csv_to_sqlite(df)
     schema = get_schema(conn)
     sample_rows = df.head(3).to_string(index=False)
@@ -236,7 +236,7 @@ if uploaded_file:
 
     st.markdown("---")
     st.markdown("### 💬 Ask a Question")
-    
+
     # Suggested questions
     st.markdown("**Quick examples:**")
     example_cols = df.columns.tolist()
@@ -281,7 +281,7 @@ if uploaded_file:
                         st.markdown("### 💡 Explanation")
                         st.markdown(f'<div class="answer-box">{explanation}</div>', unsafe_allow_html=True)
 
-                   with col_right:
+                    with col_right:
                         st.markdown("### 📋 Query Results")
                         df_result, error = run_sql(conn, sql_query)
                         if error:
@@ -289,16 +289,16 @@ if uploaded_file:
                         else:
                             st.dataframe(df_result, use_container_width=True)
 
+                    # ── Auto Visualization ──────────────────────────────
                     if df_result is not None and not df_result.empty:
-                        # Auto-detect chart type if AI returns "none"
                         num_cols = df_result.select_dtypes(include="number").columns.tolist()
                         cat_cols = df_result.select_dtypes(exclude="number").columns.tolist()
+                        # Auto-detect chart type if AI returns "none"
                         if chart_type == "none":
                             if len(cat_cols) >= 1 and len(num_cols) >= 1:
                                 chart_type = "bar"
                             elif len(num_cols) >= 2:
                                 chart_type = "scatter"
-
                         if chart_type != "none":
                             st.markdown("### 📊 Visualization")
                             render_chart(df_result, chart_type)
