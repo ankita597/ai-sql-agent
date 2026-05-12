@@ -48,6 +48,10 @@ st.markdown("""
         background: linear-gradient(135deg, #1a1a2e, #16213e);
         border-radius: 10px; padding: 1rem; border: 1px solid #334155; text-align: center;
     }
+    .warning-box {
+        background: linear-gradient(135deg, #2d1b00, #3d2400); color: #fbbf24;
+        padding: 1rem; border-radius: 10px; border-left: 4px solid #f59e0b; margin-top: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -91,6 +95,11 @@ def get_schema(conn, table_name="data"):
     schema_lines = [f"  {c[1]} ({c[2]})" for c in cols]
     return f"Table: {table_name}\nColumns:\n" + "\n".join(schema_lines)
 
+def get_column_names(conn, table_name="data"):
+    cursor = conn.cursor()
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    return [row[1].lower() for row in cursor.fetchall()]
+
 def run_sql(conn, query):
     try:
         df_result = pd.read_sql_query(query, conn)
@@ -99,8 +108,34 @@ def run_sql(conn, query):
         return None, str(e)
 
 
-# ─── Helper: Ask Groq ────────────────────────────────────────────────────────
-def ask_groq(client, model, schema, question, sample_rows):
+# ─── FIX 1: Validate SQL columns against actual schema ──────────────────────
+def validate_sql_columns(sql, actual_columns):
+    """Check if SQL uses columns that don't exist in the table."""
+    # Extract all quoted and unquoted identifiers from SQL
+    sql_lower = sql.lower()
+    # Remove string literals to avoid false positives
+    sql_clean = re.sub(r"'[^']*'", "", sql_lower)
+    sql_clean = re.sub(r'"[^"]*"', "", sql_clean)
+
+    # Keywords to ignore
+    keywords = {
+        "select", "from", "where", "group", "by", "order", "limit", "having",
+        "count", "sum", "avg", "min", "max", "as", "and", "or", "not", "in",
+        "is", "null", "like", "between", "case", "when", "then", "else", "end",
+        "distinct", "inner", "left", "right", "join", "on", "data", "asc", "desc",
+        "true", "false", "1", "100", "*"
+    }
+
+    # Find potential column references (words not in keywords)
+    words = re.findall(r'\b([a-z_][a-z0-9_]*)\b', sql_clean)
+    suspicious = [w for w in words if w not in keywords and not w.isdigit()]
+
+    invalid = [w for w in suspicious if w not in actual_columns]
+    return invalid
+
+
+# ─── FIX 2: Ask Groq with retry on failure ──────────────────────────────────
+def ask_groq(client, model, schema, question, sample_rows, error_feedback=None):
     system_prompt = f"""You are an expert SQLite SQL analyst. Your job is to write ONLY valid SQLite SQL queries.
 
 IMPORTANT: The database table is named "data" and has ONLY these exact columns:
@@ -110,12 +145,12 @@ Sample data (first 3 rows):
 {sample_rows}
 
 STRICT RULES - YOU MUST FOLLOW ALL OF THESE:
-1. ONLY use column names listed in the schema above. NEVER invent or guess column names.
+1. ONLY use column names listed in the schema above. Copy them EXACTLY including case. NEVER invent or guess column names.
 2. Always use table name "data".
-3. Always wrap column names that may conflict with SQL keywords in double quotes e.g. "name", "order", "group", "index".
-4. NEVER use LIMIT 1 unless the user explicitly asks for only 1 result. Always use LIMIT 100 by default.
-5. For questions like "which X is most/highest/top", return ALL groups with counts ordered by value, not just 1 row.
-6. Always include a COUNT or numeric column when grouping, so charts can be rendered.
+3. Wrap column names that conflict with SQL keywords in double quotes e.g. "name", "order", "group".
+4. NEVER use LIMIT 1 unless user explicitly asks for 1 result. Always use LIMIT 100 by default.
+5. For "which X is most/highest/top" questions, return ALL groups ordered by value — not just 1 row.
+6. Always include a COUNT or numeric column when grouping so charts can be rendered.
 7. Return ONLY valid JSON with keys: "sql", "explanation", "chart_type".
 8. chart_type must be one of: bar, line, pie, scatter, none.
    - Use "bar" for comparisons and counts by category.
@@ -125,17 +160,42 @@ STRICT RULES - YOU MUST FOLLOW ALL OF THESE:
    - Use "none" only for raw row lookups (SELECT * queries).
 9. Do NOT include markdown, backticks, or any text outside the JSON.
 """
+    messages = [{"role": "system", "content": system_prompt}]
+
+    if error_feedback:
+        # Retry with error context so AI can self-correct
+        messages.append({"role": "user", "content": f"Question: {question}"})
+        messages.append({"role": "assistant", "content": error_feedback["previous_response"]})
+        messages.append({"role": "user", "content": f"Your previous SQL failed with error: '{error_feedback['error']}'. Please fix it using ONLY the columns in the schema and try again."})
+    else:
+        messages.append({"role": "user", "content": f"Question: {question}"})
+
     response = client.chat.completions.create(
         model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Question: {question}"}
-        ],
+        messages=messages,
         temperature=0.1,
     )
     raw = response.choices[0].message.content.strip()
     raw = re.sub(r"```json|```", "", raw).strip()
-    return json.loads(raw)
+    return json.loads(raw), raw
+
+
+# ─── FIX 3: Detect ambiguous questions ──────────────────────────────────────
+def is_ambiguous(question, actual_columns):
+    """Detect if question is too vague to answer accurately."""
+    question_lower = question.lower().strip()
+
+    # Too short or generic
+    if len(question_lower.split()) <= 2:
+        return True, "Your question is too short. Please be more specific, e.g. 'Which category has the most orders?'"
+
+    # Vague words with no column reference
+    vague_phrases = ["show me", "tell me", "what about", "how about", "compare them", "analyze it", "give me info"]
+    for phrase in vague_phrases:
+        if phrase in question_lower and not any(col in question_lower for col in actual_columns):
+            return True, f"Your question is too vague. Try mentioning a specific column like: {', '.join(actual_columns[:4])}..."
+
+    return False, ""
 
 
 # ─── Helper: Auto Chart ─────────────────────────────────────────────────────
@@ -196,9 +256,7 @@ uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-
-    # Clear cache on every new upload so old data never persists
-    load_csv_to_sqlite.clear()
+    load_csv_to_sqlite.clear()  # Clear cache on new upload
 
     st.success(f"✅ Loaded **{len(df):,} rows × {len(df.columns)} columns**")
 
@@ -212,6 +270,7 @@ if uploaded_file:
 
     conn = load_csv_to_sqlite(df)
     schema = get_schema(conn)
+    actual_columns = get_column_names(conn)
     sample_rows = df.head(3).to_string(index=False)
 
     with st.expander("🗂️ Database Schema"):
@@ -221,11 +280,11 @@ if uploaded_file:
     st.markdown("### 💬 Ask a Question")
 
     st.markdown("**Quick examples:**")
-    example_cols = df.columns.tolist()
-    num_example_col = df.select_dtypes(include='number').columns[0] if df.select_dtypes(include='number').shape[1] > 0 else example_cols[0]
+    num_example_col = df.select_dtypes(include='number').columns[0] if df.select_dtypes(include='number').shape[1] > 0 else df.columns[0]
+    cat_example_col = df.select_dtypes(exclude='number').columns[0] if df.select_dtypes(exclude='number').shape[1] > 0 else df.columns[0]
     examples = [
         "Show me the top 5 rows",
-        "Count total number of records",
+        f"Count records by {cat_example_col}",
         f"What is the average {num_example_col}?",
     ]
     col_a, col_b, col_c = st.columns(3)
@@ -246,40 +305,73 @@ if uploaded_file:
         elif not user_question.strip():
             st.warning("Please enter a question.")
         else:
-            with st.spinner("🤖 AI is thinking..."):
-                try:
-                    client = Groq(api_key=groq_api_key)
-                    result = ask_groq(client, model_choice, schema, user_question, sample_rows)
+            # FIX 3: Check ambiguity before calling AI
+            ambiguous, ambiguity_msg = is_ambiguous(user_question, actual_columns)
+            if ambiguous:
+                st.warning(f"⚠️ {ambiguity_msg}")
+            else:
+                with st.spinner("🤖 AI is thinking..."):
+                    try:
+                        client = Groq(api_key=groq_api_key)
 
-                    sql_query = result.get("sql", "")
-                    explanation = result.get("explanation", "")
-                    chart_type = result.get("chart_type", "none")
+                        # First attempt
+                        result, raw_response = ask_groq(client, model_choice, schema, user_question, sample_rows)
+                        sql_query = result.get("sql", "")
+                        explanation = result.get("explanation", "")
+                        chart_type = result.get("chart_type", "none")
 
-                    col_left, col_right = st.columns([1, 1])
+                        # FIX 1: Validate columns before running SQL
+                        invalid_cols = validate_sql_columns(sql_query, actual_columns)
+                        if invalid_cols:
+                            st.warning(f"⚠️ AI used invalid columns: `{', '.join(invalid_cols)}` — auto-retrying...")
+                            result, raw_response = ask_groq(
+                                client, model_choice, schema, user_question, sample_rows,
+                                error_feedback={"error": f"Invalid columns used: {invalid_cols}", "previous_response": raw_response}
+                            )
+                            sql_query = result.get("sql", "")
+                            explanation = result.get("explanation", "")
+                            chart_type = result.get("chart_type", "none")
 
-                    with col_left:
-                        st.markdown("### 🔎 Generated SQL")
-                        st.markdown(f'<div class="sql-box">{sql_query}</div>', unsafe_allow_html=True)
-                        st.markdown("### 💡 Explanation")
-                        st.markdown(f'<div class="answer-box">{explanation}</div>', unsafe_allow_html=True)
-
-                    with col_right:
-                        st.markdown("### 📋 Query Results")
+                        # Run SQL
                         df_result, error = run_sql(conn, sql_query)
+
+                        # FIX 2: Auto-retry if SQL execution fails
                         if error:
-                            st.error(f"SQL Error: {error}")
-                        else:
-                            st.dataframe(df_result, use_container_width=True)
+                            st.warning("⚠️ SQL failed — auto-retrying with error context...")
+                            result, _ = ask_groq(
+                                client, model_choice, schema, user_question, sample_rows,
+                                error_feedback={"error": error, "previous_response": raw_response}
+                            )
+                            sql_query = result.get("sql", "")
+                            explanation = result.get("explanation", "")
+                            chart_type = result.get("chart_type", "none")
+                            df_result, error = run_sql(conn, sql_query)
 
-                    # Auto Visualization
-                    if df_result is not None and not df_result.empty:
-                        st.markdown("### 📊 Visualization")
-                        render_chart(df_result, chart_type)
+                        # Display results
+                        col_left, col_right = st.columns([1, 1])
 
-                except json.JSONDecodeError:
-                    st.error("⚠️ AI returned an unexpected format. Try rephrasing your question.")
-                except Exception as e:
-                    st.error(f"❌ Error: {e}")
+                        with col_left:
+                            st.markdown("### 🔎 Generated SQL")
+                            st.markdown(f'<div class="sql-box">{sql_query}</div>', unsafe_allow_html=True)
+                            st.markdown("### 💡 Explanation")
+                            st.markdown(f'<div class="answer-box">{explanation}</div>', unsafe_allow_html=True)
+
+                        with col_right:
+                            st.markdown("### 📋 Query Results")
+                            if error:
+                                st.error(f"SQL Error after retry: {error}")
+                            else:
+                                st.dataframe(df_result, use_container_width=True)
+
+                        # Auto Visualization
+                        if df_result is not None and not df_result.empty:
+                            st.markdown("### 📊 Visualization")
+                            render_chart(df_result, chart_type)
+
+                    except json.JSONDecodeError:
+                        st.error("⚠️ AI returned an unexpected format. Try rephrasing your question.")
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}")
 
     st.markdown("---")
     st.markdown("### 🛠️ Direct SQL Query")
