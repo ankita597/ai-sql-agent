@@ -203,8 +203,26 @@ def render_chart(df_result, chart_type):
     if df_result is None or df_result.empty:
         return
 
-    num_cols = df_result.select_dtypes(include="number").columns.tolist()
-    cat_cols = df_result.select_dtypes(exclude="number").columns.tolist()
+    df_plot = df_result.copy()
+
+    # Convert 0/1 binary columns to readable labels (True/False, Yes/No, Insured/Uninsured etc.)
+    for col in df_plot.columns:
+        if df_plot[col].dropna().isin([0, 1]).all() and df_plot[col].nunique() <= 2:
+            col_lower = col.lower()
+            if any(w in col_lower for w in ["insur", "stock", "active", "hit", "pass", "paid"]):
+                df_plot[col] = df_plot[col].map({1: "Yes", 0: "No", True: "Yes", False: "No"})
+            else:
+                df_plot[col] = df_plot[col].map({1: "True", 0: "False", True: "True", False: "False"})
+
+    num_cols = df_plot.select_dtypes(include="number").columns.tolist()
+    cat_cols = df_plot.select_dtypes(exclude="number").columns.tolist()
+
+    # If first column is binary-converted, treat it as category
+    first_col = df_plot.columns[0]
+    if first_col in num_cols and df_plot[first_col].nunique() <= 5:
+        df_plot[first_col] = df_plot[first_col].astype(str)
+        num_cols = df_plot.select_dtypes(include="number").columns.tolist()
+        cat_cols = df_plot.select_dtypes(exclude="number").columns.tolist()
 
     # Auto-detect chart type if AI returns "none" but data is chartable
     if chart_type == "none":
@@ -218,23 +236,23 @@ def render_chart(df_result, chart_type):
 
     try:
         if chart_type == "bar" and len(cat_cols) >= 1 and len(num_cols) >= 1:
-            fig = px.bar(df_result, x=cat_cols[0], y=num_cols[0],
+            fig = px.bar(df_plot, x=cat_cols[0], y=num_cols[0],
                          color=cat_cols[0], color_discrete_sequence=px.colors.qualitative.Pastel)
         elif chart_type == "line" and len(num_cols) >= 1:
             x_col = cat_cols[0] if cat_cols else num_cols[0]
-            fig = px.line(df_result, x=x_col, y=num_cols[0], markers=True,
+            fig = px.line(df_plot, x=x_col, y=num_cols[0], markers=True,
                           color_discrete_sequence=["#38bdf8"])
         elif chart_type == "pie" and len(cat_cols) >= 1 and len(num_cols) >= 1:
-            fig = px.pie(df_result, names=cat_cols[0], values=num_cols[0])
+            fig = px.pie(df_plot, names=cat_cols[0], values=num_cols[0])
         elif chart_type == "scatter" and len(num_cols) >= 2:
-            fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1],
+            fig = px.scatter(df_plot, x=num_cols[0], y=num_cols[1],
                              color_discrete_sequence=["#f472b6"])
         else:
             if len(num_cols) == 1 and len(cat_cols) == 0:
-                st.info(f"📊 Result: **{df_result[num_cols[0]].iloc[0]:,}**")
+                st.info(f"📊 Result: **{df_plot[num_cols[0]].iloc[0]:,}**")
                 return
             elif len(num_cols) >= 1 and len(cat_cols) >= 1:
-                fig = px.bar(df_result, x=cat_cols[0], y=num_cols[0],
+                fig = px.bar(df_plot, x=cat_cols[0], y=num_cols[0],
                              color_discrete_sequence=["#a78bfa"])
             else:
                 st.info("No suitable columns for visualization.")
