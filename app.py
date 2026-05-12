@@ -99,7 +99,12 @@ st.markdown("""
 # ─── Sidebar: API Key + Model ────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚙️ Configuration")
-    groq_api_key = st.secrets["GROQ_API_KEY"]
+
+    # FIX 1: Gracefully handle missing secret; fall back to a text_input for local dev
+    groq_api_key = st.secrets.get("GROQ_API_KEY", "")
+    if not groq_api_key:
+        groq_api_key = st.text_input("🔑 Groq API Key", type="password", placeholder="gsk_...")
+
     model_choice = st.selectbox(
         "🤖 LLM Model",
         ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"],
@@ -107,15 +112,15 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📋 How to Use")
     st.markdown("""
-
 1. Upload a **CSV file**
 2. Ask a **natural language question**
 3. Get **SQL + Answer + Chart**!
     """)
     st.markdown("---")
-    
+
 
 # ─── Helper: Load CSV into SQLite ───────────────────────────────────────────
+# FIX 2: Use st.cache_resource instead of st.cache_data for SQLite connection
 @st.cache_resource
 def load_csv_to_sqlite(csv_bytes: bytes, table_name: str = "data"):
     import io
@@ -175,7 +180,7 @@ Rules:
 def render_chart(df_result, chart_type):
     if df_result is None or df_result.empty or chart_type == "none":
         return
-    
+
     cols = df_result.columns.tolist()
     num_cols = df_result.select_dtypes(include="number").columns.tolist()
     cat_cols = df_result.select_dtypes(exclude="number").columns.tolist()
@@ -191,7 +196,7 @@ def render_chart(df_result, chart_type):
         elif chart_type == "scatter" and len(num_cols) >= 2:
             fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
         else:
-            # Fallback bar
+            # Fallback
             if len(num_cols) >= 2:
                 fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
             elif len(num_cols) == 1 and len(cat_cols) >= 1:
@@ -217,19 +222,21 @@ def render_chart(df_result, chart_type):
 uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
 
 if uploaded_file:
+    # FIX 2 (cont.): read raw bytes for caching; parse separately for display
     csv_bytes = uploaded_file.read()
     df = pd.read_csv(__import__("io").BytesIO(csv_bytes))
-    
+
     st.success(f"✅ Loaded **{len(df):,} rows × {len(df.columns)} columns**")
-    
+
     col1, col2, col3 = st.columns(3)
     col1.metric("📊 Rows", f"{len(df):,}")
     col2.metric("🔢 Columns", len(df.columns))
+    # FIX 4: use len(csv_bytes) instead of uploaded_file.size
     col3.metric("💾 Size", f"{len(csv_bytes) / 1024:.1f} KB")
-    
+
     with st.expander("🔍 Preview Data (first 10 rows)"):
         st.dataframe(df.head(10), use_container_width=True)
-    
+
     conn = load_csv_to_sqlite(csv_bytes)
     schema = get_schema(conn)
     sample_rows = df.head(3).to_string(index=False)
@@ -239,25 +246,36 @@ if uploaded_file:
 
     st.markdown("---")
     st.markdown("### 💬 Ask a Question")
-    
-    # Suggested questions
-    st.markdown("**Quick examples:**")
+
+    # FIX 3: Use session_state to persist selected example across reruns
+    if "q_select" not in st.session_state:
+        st.session_state["q_select"] = ""
+
     example_cols = df.columns.tolist()
     examples = [
-        f"Show me the top 5 rows",
-        f"Count total number of records",
-        f"What is the average of {example_cols[1] if len(example_cols) > 1 else example_cols[0]}?" if df.select_dtypes(include='number').shape[1] > 0 else "Show distinct values",
+        "Show me the top 5 rows",
+        "Count total number of records",
+        (
+            f"What is the average of {example_cols[1] if len(example_cols) > 1 else example_cols[0]}?"
+            if df.select_dtypes(include="number").shape[1] > 0
+            else "Show distinct values"
+        ),
     ]
+
+    st.markdown("**Quick examples:**")
     col_a, col_b, col_c = st.columns(3)
-    q_select = ""
-    if col_a.button(examples[0]): q_select = examples[0]
-    if col_b.button(examples[1]): q_select = examples[1]
-    if col_c.button(examples[2]): q_select = examples[2]
+    if col_a.button(examples[0]):
+        st.session_state["q_select"] = examples[0]
+    if col_b.button(examples[1]):
+        st.session_state["q_select"] = examples[1]
+    if col_c.button(examples[2]):
+        st.session_state["q_select"] = examples[2]
 
     user_question = st.text_input(
         "Ask anything about your data...",
-        value=q_select,
-        placeholder="e.g. What are the top 5 products by total sales?"
+        value=st.session_state["q_select"],
+        placeholder="e.g. What are the top 5 products by total sales?",
+        key="user_question_input",
     )
 
     if st.button("🚀 Analyze"):
@@ -291,15 +309,16 @@ if uploaded_file:
                             st.error(f"SQL Error: {error}")
                         else:
                             st.dataframe(df_result, use_container_width=True)
-                            
-                           st.markdown("### 📊 Visualization")
-                        if df_result is not None and not df_result.empty:
-                            if chart_type == "none":
-                                st.info("📊 No visualization available for this query.")
-                            else:
-                                render_chart(df_result, chart_type)
-                            else:
-                               st.info("📊 No data to visualize.")
+
+                    # FIX 5: Always show Visualization section
+                    st.markdown("### 📊 Visualization")
+                    if df_result is not None and not df_result.empty:
+                        if chart_type == "none":
+                            st.info("📊 No visualization available for this query.")
+                        else:
+                            render_chart(df_result, chart_type)
+                    else:
+                        st.info("📊 No data to visualize.")
 
                 except json.JSONDecodeError:
                     st.error("⚠️ AI returned an unexpected format. Try rephrasing your question.")
@@ -308,7 +327,7 @@ if uploaded_file:
 
     st.markdown("---")
     st.markdown("### 🛠️ Direct SQL Query")
-    direct_sql = st.text_area("Write your own SQL query:", placeholder='SELECT * FROM data LIMIT 10')
+    direct_sql = st.text_area("Write your own SQL query:", placeholder="SELECT * FROM data LIMIT 10")
     if st.button("▶️ Run SQL"):
         if direct_sql.strip():
             df_r, err = run_sql(conn, direct_sql)
