@@ -116,7 +116,7 @@ with st.sidebar:
     
 
 # ─── Helper: Load CSV into SQLite ───────────────────────────────────────────
-@st.cache_data
+@st.cache_resource
 def write_csv_to_sqlite(df, path):
     engine = create_engine(...)
     df.to_sql(...)
