@@ -117,14 +117,13 @@ with st.sidebar:
 
 # ─── Helper: Load CSV into SQLite ───────────────────────────────────────────
 @st.cache_data
-def load_csv_to_sqlite(df: pd.DataFrame, table_name: str = "data"):
-    conn = sqlite3.connect(":memory:", check_same_thread=False)
-    df.to_sql(table_name, conn, if_exists="replace", index=False)
-    return conn
+def write_csv_to_sqlite(df, path):
+    engine = create_engine(...)
+    df.to_sql(...)
+    engine.dispose()       
 
-def get_schema(conn, table_name="data"):
-    cursor = conn.cursor()
-    cursor.execute(f"PRAGMA table_info({table_name})")
+def get_engine(path):
+    return create_engine(...)  
     cols = cursor.fetchall()
     schema_lines = [f"  {c[1]} ({c[2]})" for c in cols]
     return f"Table: {table_name}\nColumns:\n" + "\n".join(schema_lines)
