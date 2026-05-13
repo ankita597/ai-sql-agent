@@ -4,7 +4,6 @@ import sqlite3
 import os
 import re
 import json
-import matplotlib.pyplot as plt
 import plotly.express as px
 from groq import Groq
 
