@@ -186,6 +186,13 @@ def render_chart(df_result, chart_type):
     if df_result is None or df_result.empty or chart_type == "none":
         return
 
+    # Treat boolean-like columns (0/1 with <=2 unique values) as categorical
+    bool_like = [c for c in df_result.select_dtypes(include="number").columns
+                 if df_result[c].nunique() <= 2]
+    for col in bool_like:
+        df_result[col] = df_result[col].map({0: "No", 1: "Yes",
+                                              False: "No", True: "Yes"})
+
     cols = df_result.columns.tolist()
     num_cols = df_result.select_dtypes(include="number").columns.tolist()
     cat_cols = df_result.select_dtypes(exclude="number").columns.tolist()
@@ -202,10 +209,10 @@ def render_chart(df_result, chart_type):
             fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
         else:
             # Fallback
-            if len(num_cols) >= 2:
-                fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
-            elif len(num_cols) == 1 and len(cat_cols) >= 1:
+            if len(cat_cols) >= 1 and len(num_cols) >= 1:
                 fig = px.bar(df_result, x=cat_cols[0], y=num_cols[0], color_discrete_sequence=["#a78bfa"])
+            elif len(num_cols) >= 2:
+                fig = px.bar(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#a78bfa"])
             elif len(num_cols) == 1:
                 st.info(f"📊 Result: **{df_result[num_cols[0]].iloc[0]}**")
                 return
