@@ -186,12 +186,18 @@ def render_chart(df_result, chart_type):
     if df_result is None or df_result.empty or chart_type == "none":
         return
 
+    # Clean column names like COUNT(*), AVG(col) → count, avg_col
+    df_result.columns = [
+        re.sub(r"[\(\)\*\s]", "_", col).strip("_").lower()
+        for col in df_result.columns
+    ]
+
     # Treat boolean-like columns (0/1 with <=2 unique values) as categorical
     bool_like = [c for c in df_result.select_dtypes(include="number").columns
                  if df_result[c].nunique() <= 2]
     for col in bool_like:
         df_result[col] = df_result[col].map({0: "No", 1: "Yes",
-                                              False: "No", True: "Yes"})
+                                             False: "No", True: "Yes"})
 
     cols = df_result.columns.tolist()
     num_cols = df_result.select_dtypes(include="number").columns.tolist()
