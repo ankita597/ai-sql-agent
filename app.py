@@ -233,12 +233,7 @@ def render_chart(df_result, ai_chart_type):
     if df_result is None or df_result.empty:
         return
 
-    # Try converting columns to numeric if possible
-    for col in df_result.columns:
-        try:
-            df_result[col] = pd.to_numeric(df_result[col])
-        except:
-            pass
+    
 
     chart_type, df_result, num_cols, cat_cols = smart_chart_type(df_result, ai_chart_type)
 
