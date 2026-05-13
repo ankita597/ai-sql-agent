@@ -180,7 +180,7 @@ Rules:
 # ─── Helper: Smart chart type override ──────────────────────────────────────
 def smart_chart_type(df, ai_chart_type):
     """Override AI chart_type based on actual data shape."""
-   df.columns = [
+    df.columns = [
         re.sub(r"[\(\)\*\s]", "_", col).strip("_").lower()
         for col in df.columns
     ]
