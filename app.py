@@ -95,15 +95,12 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ─── Sidebar: API Key + Model ────────────────────────────────────────────────
+# ─── Sidebar ────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚙️ Configuration")
-
-    # FIX 1: Gracefully handle missing secret; fall back to a text_input for local dev
     groq_api_key = st.secrets.get("GROQ_API_KEY", "")
     if not groq_api_key:
         groq_api_key = st.text_input("🔑 Groq API Key", type="password", placeholder="gsk_...")
-
     model_choice = st.selectbox(
         "🤖 LLM Model",
         ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"],
@@ -119,7 +116,6 @@ with st.sidebar:
 
 
 # ─── Helper: Load CSV into SQLite ───────────────────────────────────────────
-# FIX 2: Use st.cache_resource instead of st.cache_data for SQLite connection
 @st.cache_resource
 def load_csv_to_sqlite(csv_bytes: bytes, table_name: str = "data"):
     import io
@@ -177,31 +173,63 @@ Rules:
         temperature=0.1,
     )
     raw = response.choices[0].message.content.strip()
-    # Strip markdown code fences if present
     raw = re.sub(r"```json|```", "", raw).strip()
     return json.loads(raw)
 
-# ─── Helper: Auto Chart ─────────────────────────────────────────────────────
-def render_chart(df_result, chart_type):
-    if df_result is None or df_result.empty or chart_type == "none":
-        return
 
-    # Clean column names like COUNT(*), AVG(col) → count, avg_col
-    df_result.columns = [
+# ─── Helper: Smart chart type override ──────────────────────────────────────
+def smart_chart_type(df, ai_chart_type):
+    """Override AI chart_type based on actual data shape."""
+    # Clean column names first
+    df.columns = [
         re.sub(r"[\(\)\*\s]", "_", col).strip("_").lower()
-        for col in df_result.columns
+        for col in df.columns
     ]
 
-    # Treat boolean-like columns (0/1 with <=2 unique values) as categorical
-    bool_like = [c for c in df_result.select_dtypes(include="number").columns
-                 if df_result[c].nunique() <= 2]
+    # Convert 0/1 bool-like columns to Yes/No so they become categorical
+    bool_like = [c for c in df.select_dtypes(include="number").columns
+                 if df[c].nunique() <= 2]
     for col in bool_like:
-        df_result[col] = df_result[col].map({0: "No", 1: "Yes",
-                                             False: "No", True: "Yes"})
+        df[col] = df[col].map({0: "No", 1: "Yes", False: "No", True: "Yes"})
 
-    cols = df_result.columns.tolist()
-    num_cols = df_result.select_dtypes(include="number").columns.tolist()
-    cat_cols = df_result.select_dtypes(exclude="number").columns.tolist()
+    num_cols = df.select_dtypes(include="number").columns.tolist()
+    cat_cols = df.select_dtypes(exclude="number").columns.tolist()
+    total_cols = len(df.columns)
+    total_rows = len(df)
+
+    # Single value result → no chart
+    if total_rows == 1 and len(num_cols) == 1 and len(cat_cols) == 0:
+        return "single", df, num_cols, cat_cols
+
+    # Too many columns (SELECT *) → no chart
+    if total_cols > 5:
+        return "none", df, num_cols, cat_cols
+
+    # 1 cat + 1 num → bar (override AI)
+    if len(cat_cols) >= 1 and len(num_cols) >= 1:
+        return ai_chart_type if ai_chart_type in ["bar", "line", "pie"] else "bar", df, num_cols, cat_cols
+
+    # 2 num → scatter
+    if len(num_cols) >= 2:
+        return "scatter", df, num_cols, cat_cols
+
+    return "none", df, num_cols, cat_cols
+
+
+# ─── Helper: Auto Chart ─────────────────────────────────────────────────────
+def render_chart(df_result, ai_chart_type):
+    if df_result is None or df_result.empty:
+        return
+
+    chart_type, df_result, num_cols, cat_cols = smart_chart_type(df_result, ai_chart_type)
+
+    if chart_type == "single":
+        st.info(f"📊 Result: **{df_result[num_cols[0]].iloc[0]:,}**")
+        return
+
+    if chart_type == "none":
+        st.info("📊 No visualization available for this query.")
+        return
 
     try:
         if chart_type == "bar" and len(cat_cols) >= 1 and len(num_cols) >= 1:
@@ -214,16 +242,13 @@ def render_chart(df_result, chart_type):
         elif chart_type == "scatter" and len(num_cols) >= 2:
             fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
         else:
-            # Fallback
+            # Final fallback
             if len(cat_cols) >= 1 and len(num_cols) >= 1:
                 fig = px.bar(df_result, x=cat_cols[0], y=num_cols[0], color_discrete_sequence=["#a78bfa"])
             elif len(num_cols) >= 2:
                 fig = px.bar(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#a78bfa"])
-            elif len(num_cols) == 1:
-                st.info(f"📊 Result: **{df_result[num_cols[0]].iloc[0]}**")
-                return
             else:
-                st.info("No suitable columns for visualization.")
+                st.info("📊 No suitable columns for visualization.")
                 return
 
         fig.update_layout(
@@ -236,11 +261,11 @@ def render_chart(df_result, chart_type):
     except Exception as e:
         st.warning(f"Chart could not be rendered: {e}")
 
+
 # ─── Main App ────────────────────────────────────────────────────────────────
 uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
 
 if uploaded_file:
-    # FIX 2 (cont.): read raw bytes for caching; parse separately for display
     csv_bytes = uploaded_file.read()
     df = pd.read_csv(__import__("io").BytesIO(csv_bytes))
 
@@ -249,7 +274,6 @@ if uploaded_file:
     col1, col2, col3 = st.columns(3)
     col1.metric("📊 Rows", f"{len(df):,}")
     col2.metric("🔢 Columns", len(df.columns))
-    # FIX 4: use len(csv_bytes) instead of uploaded_file.size
     col3.metric("💾 Size", f"{len(csv_bytes) / 1024:.1f} KB")
 
     with st.expander("🔍 Preview Data (first 10 rows)"):
@@ -265,7 +289,6 @@ if uploaded_file:
     st.markdown("---")
     st.markdown("### 💬 Ask a Question")
 
-    # FIX 3: Use session_state to persist selected example across reruns
     if "q_select" not in st.session_state:
         st.session_state["q_select"] = ""
 
@@ -316,7 +339,6 @@ if uploaded_file:
                     with col_left:
                         st.markdown("### 🔎 Generated SQL")
                         st.markdown(f'<div class="sql-box">{sql_query}</div>', unsafe_allow_html=True)
-
                         st.markdown("### 💡 Explanation")
                         st.markdown(f'<div class="answer-box">{explanation}</div>', unsafe_allow_html=True)
 
@@ -328,13 +350,9 @@ if uploaded_file:
                         else:
                             st.dataframe(df_result, use_container_width=True)
 
-                    # FIX 5: Always show Visualization section
                     st.markdown("### 📊 Visualization")
                     if df_result is not None and not df_result.empty:
-                        if chart_type == "none":
-                            st.info("📊 No visualization available for this query.")
-                        else:
-                            render_chart(df_result, chart_type)
+                        render_chart(df_result, chart_type)
                     else:
                         st.info("📊 No data to visualize.")
 
