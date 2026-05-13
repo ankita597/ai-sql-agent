@@ -180,46 +180,77 @@ Rules:
 # ─── Helper: Smart chart type override ──────────────────────────────────────
 def smart_chart_type(df, ai_chart_type):
     """Override AI chart_type based on actual data shape."""
+
+    # Clean column names
     df.columns = [
-        re.sub(r"[\(\)\*\s]", "_", col).strip("_").lower()
+        re.sub(r"[\(\)\*\s]", "_", str(col)).strip("_").lower()
         for col in df.columns
     ]
+
     df = df.reset_index(drop=True)
 
-    # Convert 0/1 bool-like columns to Yes/No so they become categorical
-    bool_like = [c for c in df.select_dtypes(include="number").columns
-                 if df[c].nunique() <= 2]
-    for col in bool_like:
-        df[col] = df[col].map({0: "No", 1: "Yes", False: "No", True: "Yes"})
+    # Try converting object columns to numeric
+    for col in df.columns:
+        try:
+            df[col] = pd.to_numeric(df[col])
+        except:
+            pass
 
+    # Convert bool-like numeric columns to categorical labels
+    bool_like = [
+        c for c in df.select_dtypes(include="number").columns
+        if df[c].nunique() <= 2
+    ]
+
+    for col in bool_like:
+        df[col] = df[col].map({
+            0: "No",
+            1: "Yes",
+            False: "No",
+            True: "Yes"
+        })
+
+    # Detect numeric and categorical columns
     num_cols = df.select_dtypes(include="number").columns.tolist()
     cat_cols = df.select_dtypes(exclude="number").columns.tolist()
+
     total_cols = len(df.columns)
     total_rows = len(df)
 
-    # Single value result → show number not chart
+    # Single numeric value → metric display
     if total_rows == 1 and len(num_cols) == 1 and len(cat_cols) == 0:
         return "single", df, num_cols, cat_cols
 
-    # Too many columns (SELECT *) → no chart
-    if total_cols > 5:
+    # Very large/wide table → skip chart
+    if total_cols > 10 and not (len(cat_cols) >= 1 and len(num_cols) >= 1):
         return "none", df, num_cols, cat_cols
 
-    # 1 cat + 1 num → bar (override AI if it said none)
+    # Category + numeric → bar/line/pie
     if len(cat_cols) >= 1 and len(num_cols) >= 1:
-        return ai_chart_type if ai_chart_type in ["bar", "line", "pie"] else "bar", df, num_cols, cat_cols
 
-    # 2 num → scatter
+        if ai_chart_type in ["bar", "line", "pie"]:
+            return ai_chart_type, df, num_cols, cat_cols
+
+        return "bar", df, num_cols, cat_cols
+
+    # Two numeric columns → scatter
     if len(num_cols) >= 2:
         return "scatter", df, num_cols, cat_cols
 
+    # Fallback
     return "none", df, num_cols, cat_cols
-
 
 # ─── Helper: Auto Chart ─────────────────────────────────────────────────────
 def render_chart(df_result, ai_chart_type):
     if df_result is None or df_result.empty:
         return
+
+    # Try converting columns to numeric if possible
+    for col in df_result.columns:
+        try:
+            df_result[col] = pd.to_numeric(df_result[col])
+        except:
+            pass
 
     chart_type, df_result, num_cols, cat_cols = smart_chart_type(df_result, ai_chart_type)
 
