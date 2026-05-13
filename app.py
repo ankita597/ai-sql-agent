@@ -192,11 +192,11 @@ def render_chart(df_result, ai_chart_type):
     chart_type, num_cols, cat_cols = smart_chart_type(df)
 
     if chart_type == "single":
-        st.info(f"📊 Result: **{df[num_cols[0]].iloc[0]:,}**")
+        st.info(f"📊 No visualization available for this query.")
         return
 
     if chart_type == "single_label":
-        st.info(f"📊 **{df[cat_cols[0]].iloc[0]}** — {df[num_cols[0]].iloc[0]:,}")
+        st.info(f"📊 No visualization available for this query.")
         return
 
     if chart_type == "none":
