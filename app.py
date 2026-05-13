@@ -197,7 +197,7 @@ def smart_chart_type(df, ai_chart_type):
     total_cols = len(df.columns)
     total_rows = len(df)
 
-    # Single value result → no chart
+    # Single value result → show number not chart
     if total_rows == 1 and len(num_cols) == 1 and len(cat_cols) == 0:
         return "single", df, num_cols, cat_cols
 
@@ -205,7 +205,7 @@ def smart_chart_type(df, ai_chart_type):
     if total_cols > 5:
         return "none", df, num_cols, cat_cols
 
-    # 1 cat + 1 num → bar (override AI)
+    # 1 cat + 1 num → bar (override AI if it said none)
     if len(cat_cols) >= 1 and len(num_cols) >= 1:
         return ai_chart_type if ai_chart_type in ["bar", "line", "pie"] else "bar", df, num_cols, cat_cols
 
