@@ -162,6 +162,11 @@ Rules:
 - Never use two LIMIT clauses in the same query
 - Return your response as valid JSON only (no markdown), with keys: "sql", "explanation", "chart_type"
 - chart_type must be one of: bar, line, pie, scatter, none
+- Use "none" ONLY for single-value results (e.g. COUNT(*) or SUM with no grouping)
+- If result has 1 text column + 1 number column → always use "bar"
+- If result has 2 number columns → use "scatter"
+- If result is grouped by category with counts or totals → use "bar" or "pie"
+- Always prefer showing a chart over "none"
 """
     response = client.chat.completions.create(
         model=model,
