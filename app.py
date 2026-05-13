@@ -180,11 +180,11 @@ Rules:
 # ─── Helper: Smart chart type override ──────────────────────────────────────
 def smart_chart_type(df, ai_chart_type):
     """Override AI chart_type based on actual data shape."""
-    # Clean column names first
-    df.columns = [
+   df.columns = [
         re.sub(r"[\(\)\*\s]", "_", col).strip("_").lower()
         for col in df.columns
     ]
+    df = df.reset_index(drop=True)
 
     # Convert 0/1 bool-like columns to Yes/No so they become categorical
     bool_like = [c for c in df.select_dtypes(include="number").columns
