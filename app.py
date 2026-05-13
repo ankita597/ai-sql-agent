@@ -162,7 +162,9 @@ def smart_chart_type(df):
     # Single value → just show number
     if total_rows == 1 and len(num_cols) == 1 and len(cat_cols) == 0:
         return "single", num_cols, cat_cols
-
+    # Single row with cat+num → just show as text, not a pie
+    if total_rows == 1 and len(cat_cols) >= 1 and len(num_cols) >= 1:
+        return "single_label", num_cols, cat_cols
     # Too many columns (SELECT *) → no chart
     if total_cols > 5:
         return "none", num_cols, cat_cols
@@ -190,6 +192,10 @@ def render_chart(df_result, ai_chart_type):
 
     if chart_type == "single":
         st.info(f"📊 Result: **{df[num_cols[0]].iloc[0]:,}**")
+        return
+
+    if chart_type == "single_label":
+        st.info(f"📊 **{df[cat_cols[0]].iloc[0]}** — {df[num_cols[0]].iloc[0]:,}")
         return
 
     if chart_type == "none":
