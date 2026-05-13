@@ -7,7 +7,6 @@ import json
 import plotly.express as px
 from groq import Groq
 
-# ─── Page Config ────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="AI SQL Data Analyst",
     page_icon="🧠",
@@ -15,79 +14,38 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─── Custom CSS ─────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Space Grotesk', sans-serif;
-    }
-    
+    html, body, [class*="css"] { font-family: 'Space Grotesk', sans-serif; }
     .main-header {
         background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-        padding: 2rem;
-        border-radius: 15px;
-        margin-bottom: 2rem;
-        color: white;
-        text-align: center;
+        padding: 2rem; border-radius: 15px; margin-bottom: 2rem;
+        color: white; text-align: center;
     }
-    
     .main-header h1 {
-        font-size: 2.5rem;
-        font-weight: 700;
+        font-size: 2.5rem; font-weight: 700;
         background: linear-gradient(90deg, #a78bfa, #38bdf8);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
-    
     .sql-box {
-        background: #1e1e2e;
-        color: #cdd6f4;
-        padding: 1rem;
-        border-radius: 10px;
-        font-family: 'Courier New', monospace;
-        border-left: 4px solid #a78bfa;
-        font-size: 0.9rem;
-        white-space: pre-wrap;
+        background: #1e1e2e; color: #cdd6f4; padding: 1rem;
+        border-radius: 10px; font-family: 'Courier New', monospace;
+        border-left: 4px solid #a78bfa; font-size: 0.9rem; white-space: pre-wrap;
     }
-    
     .answer-box {
-        background: linear-gradient(135deg, #1a1a2e, #16213e);
-        color: #e2e8f0;
-        padding: 1.5rem;
-        border-radius: 12px;
-        border-left: 4px solid #38bdf8;
-        margin-top: 1rem;
+        background: linear-gradient(135deg, #1a1a2e, #16213e); color: #e2e8f0;
+        padding: 1.5rem; border-radius: 12px; border-left: 4px solid #38bdf8; margin-top: 1rem;
     }
-    
     .stButton>button {
-        background: linear-gradient(135deg, #a78bfa, #38bdf8);
-        color: white;
-        font-weight: 600;
-        border-radius: 8px;
-        border: none;
-        padding: 0.5rem 2rem;
-        width: 100%;
-        font-size: 1rem;
+        background: linear-gradient(135deg, #a78bfa, #38bdf8); color: white;
+        font-weight: 600; border-radius: 8px; border: none;
+        padding: 0.5rem 2rem; width: 100%; font-size: 1rem;
     }
-    
-    .stButton>button:hover {
-        opacity: 0.9;
-        transform: translateY(-1px);
-    }
-    
-    .metric-card {
-        background: linear-gradient(135deg, #1a1a2e, #16213e);
-        border-radius: 10px;
-        padding: 1rem;
-        border: 1px solid #334155;
-        text-align: center;
-    }
+    .stButton>button:hover { opacity: 0.9; transform: translateY(-1px); }
 </style>
 """, unsafe_allow_html=True)
 
-# ─── Header ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="main-header">
     <h1>🧠 AI SQL Data Analyst Agent</h1>
@@ -95,7 +53,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ─── Sidebar ────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚙️ Configuration")
     groq_api_key = st.secrets.get("GROQ_API_KEY", "")
@@ -115,7 +72,6 @@ with st.sidebar:
     st.markdown("---")
 
 
-# ─── Helper: Load CSV into SQLite ───────────────────────────────────────────
 @st.cache_resource
 def load_csv_to_sqlite(csv_bytes: bytes, table_name: str = "data"):
     import io
@@ -138,7 +94,6 @@ def run_sql(conn, query):
     except Exception as e:
         return None, str(e)
 
-# ─── Helper: Ask Groq ────────────────────────────────────────────────────────
 def ask_groq(client, model, schema, question, sample_rows):
     system_prompt = f"""You are an expert SQL analyst. Given a SQLite database schema and sample data, you:
 1. Generate a correct SQLite SQL query to answer the user's question.
@@ -155,13 +110,14 @@ Rules:
 - Always use the table name "data"
 - Only use columns that exist in the schema
 - If a column name has spaces, wrap it in double quotes e.g. "Customer ID", "Purchase Amount (USD)"
+- Always use aliases for aggregations e.g. COUNT(*) as count, AVG(col) as avg_col
 - Add LIMIT 100 at the end ONLY if the query does not already contain a LIMIT clause
 - Never use two LIMIT clauses in the same query
 - Return your response as valid JSON only (no markdown), with keys: "sql", "explanation", "chart_type"
 - chart_type must be one of: bar, line, pie, scatter, none
 - Use "none" ONLY for single-value results (e.g. COUNT(*) or SUM with no grouping)
 - If result has 1 text column + 1 number column → always use "bar"
-- If result has 2 number columns → use "scatter"
+- If result has 2 number columns → use "line"
 - If result is grouped by category with counts or totals → use "bar" or "pie"
 - Always prefer showing a chart over "none"
 """
@@ -178,21 +134,26 @@ Rules:
     return json.loads(raw)
 
 
-# ─── Helper: Smart chart type override ──────────────────────────────────────
-def smart_chart_type(df, ai_chart_type):
-    """Pick best chart type based on actual data shape."""
+def clean_df_for_chart(df):
+    """Clean dataframe columns and types for charting."""
+    # Clean column names: remove special chars, quotes, spaces
+    df = df.copy()
     df.columns = [
-        re.sub(r"[\(\)\*\s\"\']", "_", col).strip("_").lower()
+        re.sub(r"[\(\)\*\s\"\']+", "_", col).strip("_").lower()
         for col in df.columns
     ]
     df = df.reset_index(drop=True)
 
-    # Convert 0/1 bool-like columns to Yes/No
-    bool_like = [c for c in df.select_dtypes(include="number").columns
-                 if df[c].nunique() <= 2]
-    for col in bool_like:
-        df[col] = df[col].map({0: "No", 1: "Yes", False: "No", True: "Yes"})
+    # Convert 0/1 bool-like numeric columns to Yes/No (categorical)
+    for col in df.select_dtypes(include="number").columns:
+        if df[col].nunique() <= 2 and set(df[col].dropna().unique()).issubset({0, 1, 0.0, 1.0}):
+            df[col] = df[col].map({0: "No", 1: "Yes", 0.0: "No", 1.0: "Yes"})
 
+    return df
+
+
+def smart_chart_type(df):
+    """Pick best chart type based on actual data shape."""
     num_cols = df.select_dtypes(include="number").columns.tolist()
     cat_cols = df.select_dtypes(exclude="number").columns.tolist()
     total_cols = len(df.columns)
@@ -200,67 +161,53 @@ def smart_chart_type(df, ai_chart_type):
 
     # Single value → just show number
     if total_rows == 1 and len(num_cols) == 1 and len(cat_cols) == 0:
-        return "single", df, num_cols, cat_cols
+        return "single", num_cols, cat_cols
 
     # Too many columns (SELECT *) → no chart
     if total_cols > 5:
-        return "none", df, num_cols, cat_cols
+        return "none", num_cols, cat_cols
 
     if len(cat_cols) >= 1 and len(num_cols) >= 1:
-        cat_col = cat_cols[0]
-        num_col = num_cols[0]
-        unique_cats = df[cat_col].nunique()
-
-        # Few categories (2-5) → pie chart
+        unique_cats = df[cat_cols[0]].nunique()
         if unique_cats <= 5:
-            return "pie", df, num_cols, cat_cols
-
-        # Many categories (6-20) → bar chart
-        elif unique_cats <= 20:
-            return "bar", df, num_cols, cat_cols
-
-        # Too many categories → bar (horizontal would be ideal)
+            return "pie", num_cols, cat_cols
         else:
-            return "bar", df, num_cols, cat_cols
+            return "bar", num_cols, cat_cols
 
-    # 2 numeric columns → line chart (better than scatter)
+    # 2 numeric columns → line chart
     if len(num_cols) >= 2:
-        return "line", df, num_cols, cat_cols
+        return "line", num_cols, cat_cols
 
-    return "none", df, num_cols, cat_cols
-# ─── Helper: Auto Chart ─────────────────────────────────────────────────────
+    return "none", num_cols, cat_cols
+
+
 def render_chart(df_result, ai_chart_type):
     if df_result is None or df_result.empty:
         return
 
-    
-
-    chart_type, df_result, num_cols, cat_cols = smart_chart_type(df_result, ai_chart_type)
+    df = clean_df_for_chart(df_result)
+    chart_type, num_cols, cat_cols = smart_chart_type(df)
 
     if chart_type == "single":
-        st.info(f"📊 Result: **{df_result[num_cols[0]].iloc[0]:,}**")
+        st.info(f"📊 Result: **{df[num_cols[0]].iloc[0]:,}**")
         return
 
     if chart_type == "none":
-        st.info("📊  Visualization not applicable for this query result.")
+        st.info("📊 No visualization available for this query.")
         return
 
     try:
-        if chart_type == "bar" and len(cat_cols) >= 1 and len(num_cols) >= 1:
-            fig = px.bar(df_result, x=cat_cols[0], y=num_cols[0], color_discrete_sequence=["#a78bfa"])
-        elif chart_type == "line" and len(num_cols) >= 1:
-            x_col = cat_cols[0] if cat_cols else num_cols[0]
-            fig = px.line(df_result, x=x_col, y=num_cols[0], markers=True, color_discrete_sequence=["#38bdf8"])
-        elif chart_type == "pie" and len(cat_cols) >= 1 and len(num_cols) >= 1:
-            fig = px.pie(df_result, names=cat_cols[0], values=num_cols[0])
-        elif chart_type == "scatter" and len(num_cols) >= 2:
-            fig = px.scatter(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#f472b6"])
+        if chart_type == "pie" and len(cat_cols) >= 1 and len(num_cols) >= 1:
+            fig = px.pie(df, names=cat_cols[0], values=num_cols[0])
+        elif chart_type == "bar" and len(cat_cols) >= 1 and len(num_cols) >= 1:
+            fig = px.bar(df, x=cat_cols[0], y=num_cols[0], color_discrete_sequence=["#a78bfa"])
+        elif chart_type == "line" and len(num_cols) >= 2:
+            fig = px.line(df, x=num_cols[0], y=num_cols[1], markers=True, color_discrete_sequence=["#38bdf8"])
         else:
-            # Final fallback
             if len(cat_cols) >= 1 and len(num_cols) >= 1:
-                fig = px.bar(df_result, x=cat_cols[0], y=num_cols[0], color_discrete_sequence=["#a78bfa"])
+                fig = px.bar(df, x=cat_cols[0], y=num_cols[0], color_discrete_sequence=["#a78bfa"])
             elif len(num_cols) >= 2:
-                fig = px.bar(df_result, x=num_cols[0], y=num_cols[1], color_discrete_sequence=["#a78bfa"])
+                fig = px.line(df, x=num_cols[0], y=num_cols[1], markers=True, color_discrete_sequence=["#38bdf8"])
             else:
                 st.info("📊 No suitable columns for visualization.")
                 return
@@ -276,7 +223,6 @@ def render_chart(df_result, ai_chart_type):
         st.warning(f"Chart could not be rendered: {e}")
 
 
-# ─── Main App ────────────────────────────────────────────────────────────────
 uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
 
 if uploaded_file:
