@@ -182,7 +182,7 @@ Rules:
 def smart_chart_type(df, ai_chart_type):
     """Pick best chart type based on actual data shape."""
     df.columns = [
-        re.sub(r"[\(\)\*\s]", "_", col).strip("_").lower()
+        re.sub(r"[\(\)\*\s\"\']", "_", col).strip("_").lower()
         for col in df.columns
     ]
     df = df.reset_index(drop=True)
