@@ -259,7 +259,7 @@ def render_chart(df_result, ai_chart_type):
         return
 
     if chart_type == "none":
-        st.info("📊 No visualization available for this query.")
+        st.info("📊  Visualization not applicable for this query result.")
         return
 
     try:
