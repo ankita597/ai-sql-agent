@@ -137,7 +137,6 @@ Rules:
 
 def clean_df_for_chart(df):
     """Clean dataframe columns and types for charting."""
-    # Clean column names: remove special chars, quotes, spaces
     df = df.copy()
     df.columns = [
         re.sub(r"[\(\)\*\s\"\']+", "_", col).strip("_").lower()
@@ -145,7 +144,6 @@ def clean_df_for_chart(df):
     ]
     df = df.reset_index(drop=True)
 
-    # Convert 0/1 bool-like numeric columns to Yes/No (categorical)
     for col in df.select_dtypes(include="number").columns:
         if df[col].nunique() <= 2 and set(df[col].dropna().unique()).issubset({0, 1, 0.0, 1.0}):
             df[col] = df[col].map({0: "No", 1: "Yes", 0.0: "No", 1.0: "Yes"})
@@ -160,13 +158,10 @@ def smart_chart_type(df):
     total_cols = len(df.columns)
     total_rows = len(df)
 
-    # Single value → just show number
     if total_rows == 1 and len(num_cols) == 1 and len(cat_cols) == 0:
         return "single", num_cols, cat_cols
-    # Single row with cat+num → just show as text, not a pie
     if total_rows == 1 and len(cat_cols) >= 1 and len(num_cols) >= 1:
         return "single_label", num_cols, cat_cols
-    # Too many columns (SELECT *) → no chart
     if total_cols > 5:
         return "none", num_cols, cat_cols
 
@@ -177,7 +172,6 @@ def smart_chart_type(df):
         else:
             return "bar", num_cols, cat_cols
 
-    # 2 numeric columns → line chart
     if len(num_cols) >= 2:
         return "line", num_cols, cat_cols
 
@@ -191,15 +185,7 @@ def render_chart(df_result, ai_chart_type):
     df = clean_df_for_chart(df_result)
     chart_type, num_cols, cat_cols = smart_chart_type(df)
 
-    if chart_type == "single":
-        st.info(f"📊 No visualization available for this query.")
-        return
-
-    if chart_type == "single_label":
-        st.info(f"📊 No visualization available for this query.")
-        return
-
-    if chart_type == "none":
+    if chart_type in ("single", "single_label", "none"):
         st.info("📊 No visualization available for this query.")
         return
 
@@ -327,17 +313,6 @@ if uploaded_file:
                     st.error("⚠️ AI returned an unexpected format. Try rephrasing your question.")
                 except Exception as e:
                     st.error(f"❌ Error: {e}")
-
-    st.markdown("---")
-    st.markdown("### 🛠️ Direct SQL Query")
-    direct_sql = st.text_area("Write your own SQL query:", placeholder="SELECT * FROM data LIMIT 10")
-    if st.button("▶️ Run SQL"):
-        if direct_sql.strip():
-            df_r, err = run_sql(conn, direct_sql)
-            if err:
-                st.error(err)
-            else:
-                st.dataframe(df_r, use_container_width=True)
 else:
     st.info("👆 Please upload a CSV file to get started.")
     st.markdown("""
