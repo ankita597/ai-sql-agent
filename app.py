@@ -154,6 +154,7 @@ Sample rows (first 3):
 Rules:
 - Always use the table name "data"
 - Only use columns that exist in the schema
+- If a column name has spaces, wrap it in double quotes e.g. "Customer ID", "Purchase Amount (USD)"
 - Add LIMIT 100 at the end ONLY if the query does not already contain a LIMIT clause
 - Never use two LIMIT clauses in the same query
 - Return your response as valid JSON only (no markdown), with keys: "sql", "explanation", "chart_type"
