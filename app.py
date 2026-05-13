@@ -115,6 +115,7 @@ Rules:
 - Never use two LIMIT clauses in the same query
 - Return your response as valid JSON only (no markdown), with keys: "sql", "explanation", "chart_type"
 - chart_type must be one of: bar, line, pie, scatter, none
+- For "which is most/least" questions, return ALL groups with their counts ordered by count, not just the top 1
 - Use "none" ONLY for single-value results (e.g. COUNT(*) or SUM with no grouping)
 - If result has 1 text column + 1 number column → always use "bar"
 - If result has 2 number columns → use "line"
