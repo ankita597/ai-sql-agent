@@ -1,82 +1,54 @@
 # 🧠 AI SQL Data Analyst Agent
 
-> Upload any CSV → Ask questions in plain English → Get SQL + Answers + Visualizations
+An AI-powered application that allows users to upload CSV files, ask questions in plain English, and automatically generate SQL queries, insights, and visualizations.
 
----
+## 🚀 Features
+✅ Upload CSV files  
+✅ Natural Language → SQL conversion  
+✅ Automatic SQL query execution  
+✅ Interactive visualizations  
+✅ AI-powered insights generation  
+✅ Supports multiple LLM models  
 
-## 🚀 Quick Start
+## 🛠 Tech Stack
+- Frontend: Streamlit
+- Backend: Python
+- Database: SQLite (in-memory)
+- LLM: Groq (Llama 3 / Mixtral)
+- Data Processing: Pandas
+- Visualization: Plotly
 
-### 1. Install dependencies
+## 📊 Sample Questions
+- What are the top 5 products by total sales?
+- Show monthly revenue trend
+- Which category has the highest average price?
+- Count records grouped by region
+
+## ▶️ Run Locally
+
+Install dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Run the app
+Run application:
+
 ```bash
 streamlit run app.py
 ```
 
-### 3. Open in browser
-Go to `http://localhost:8501`
+Open browser:
 
----
-
-## 🔑 Get a Free Groq API Key
-1. Visit [console.groq.com](https://console.groq.com)
-2. Sign up for a free account
-3. Create an API key
-4. Paste it into the sidebar
-
----
-
-## 🧩 Tech Stack
-
-| Component       | Technology              |
-|----------------|-------------------------|
-| Frontend        | Streamlit               |
-| LLM             | Groq (Llama 3 / Mixtral)|
-| Database        | SQLite (in-memory)      |
-| Data Handling   | Pandas                  |
-| Visualization   | Plotly                  |
-
----
-
-## 🎯 Features
-
-- ✅ Upload any CSV file
-- ✅ Auto-detects schema and column types
-- ✅ Natural language → SQL conversion using Groq LLM
-- ✅ Executes SQL on an in-memory SQLite database
-- ✅ Returns: Answer + SQL Query + Chart
-- ✅ Auto-selects best chart type (bar, line, pie, scatter)
-- ✅ Direct SQL editor for advanced users
-- ✅ Supports Llama 3 (70B, 8B) and Mixtral models
-
----
-
-## 📊 Example Questions
-
-- "What are the top 5 products by total sales?"
-- "Show monthly revenue trend"
-- "Which category has the highest average price?"
-- "Count records grouped by region"
-
----
-
-## 🏗️ Architecture
-
+```text
+http://localhost:8501
 ```
-User Input (CSV + Question)
-       ↓
-Data Loader (Pandas)
-       ↓
-SQLite Database (in-memory)
-       ↓
-Groq LLM (Llama 3)
-       ↓
-SQL Query Generation
-       ↓
-Execution Engine (SQLite)
-       ↓
-Final Answer + Chart (Plotly)
-```
+
+## 🔑 Groq API Key
+1. Create a free account on Groq
+2. Generate an API key
+3. Paste the API key into the application
+
+## 📌 Project Flow
+
+CSV Upload → Pandas Processing → SQLite Database → Groq LLM → SQL Generation → Query Execution → Results + Visualization
